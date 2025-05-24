@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Chemistry Game - Hidrokarbon Puzzle</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Poppins:wght@300;400;600&display=swap');
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body { 
+            font-family: 'Poppins', sans-serif; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+            background-size: 400% 400%;
+            animation: gradientShift 8s ease infinite;
+            overflow: hidden;
+        }
+        
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        
+        .container { display: flex; height: 100vh; color: white; }
+        
+        .sidebar { 
+            width: 300px; 
+            background: rgba(0,0,0,0.2);
+            backdrop-filter: blur(20px);
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        .main-area { flex: 1; display: flex; flex-direction: column; }
+        
+        .top-bar { 
+            height: 80px; 
+            background: rgba(0,0,0,0.1);
+            backdrop-filter: blur(20px);
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            padding: 0 30px;
+        }
+        
+        .game-area { flex: 1; display: flex; }
+        .puzzle-area { width: 50%; background: rgba(255,255,255,0.05); padding: 20px; }
+        .ar-viewer { width: 50%; background: rgba(0,0,0,0.2); position: relative; }
+        
+        .atom-palette, .challenge-card, .tutorial, .level-indicator { 
+            background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 15px; 
+            padding: 15px; 
+            margin-bottom: 20px;
+            transition: transform 0.3s ease;
+        }
+        
+        .atom-palette:hover, .challenge-card:hover { transform: translateY(-2px); }
+        
+        .atom { 
+            display: inline-block; 
+            width: 50px; 
+            height: 50px; 
+            border-radius: 50%; 
+            margin: 5px; 
+            cursor: grab; 
+            border: 2px solid white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        
+        .atom:hover { transform: scale(1.15); }
+        .atom.carbon { background: linear-gradient(135deg, #2c3e50, #34495e); color: white; }
+        .atom.hydrogen { background: linear-gradient(135deg, #ecf0f1, #bdc3c7); color: #2c3e50; }
+        
+        .workspace { 
+            background: rgba(255,255,255,0.8);
+            border-radius: 15px; 
+            height: 300px; 
+            position: relative; 
+            border: 3px dashed #3498db;
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+        
+        .workspace:hover { border-color: #2980b9; }
+        .workspace.drag-over { 
+            border-color: #27ae60; 
+            background: rgba(46, 204, 113, 0.2);
+            transform: scale(1.02);
+        }
+        
+        .timer { 
+            font-family: 'Orbitron', monospace;
+            font-size: 24px; 
+            font-weight: 700; 
+            color: #51cf66;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        .score { 
+            font-family: 'Orbitron', monospace;
+            font-size: 20px; 
+            color: #ffd43b;
+        }
+        
+        .feedback { 
+            position: fixed; 
+            top: 50%; 
+            left: 50%; 
+            transform: translate(-50%, -50%); 
+            background: rgba(0,0,0,0.95);
+            backdrop-filter: blur(20px);
+            color: white; 
+            padding: 30px; 
+            border-radius: 20px; 
+            z-index: 1000; 
+            display: none;
+            border: 1px solid rgba(255,255,255,0.2);
+            text-align: center;
+            max-width: 400px;
+        }
+        
+        .feedback.show {
+            display: block;
+            animation: feedbackShow 0.5s ease forwards;
+        }
+        
+        @keyframes feedbackShow {
+            0% { transform: translate(-50%, -50%) scale(0); }
+            100% { transform: translate(-50%, -50%) scale(1); }
+        }
+        
+        .btn { 
+            background: linear-gradient(135deg, #4dabf7, #339af0);
+            color: white; 
+            border: none; 
+            padding: 10px 20px; 
+            border-radius: 20px; 
+            cursor: pointer; 
+            margin: 5px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+        
+        .btn:hover { 
+            transform: translateY(-2px); 
+            box-shadow: 0 5px 15px rgba(77, 171, 247, 0.4);
+        }
+        
+        .btn.success { background: linear-gradient(135deg, #51cf66, #40c057); }
+        
+        #ar-canvas { width: 100%; height: 100%; }
+        
+        .level-bar {
+            width: 100%;
+            height: 20px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        
+        .level-progress {
+            height: 100%;
+            background: linear-gradient(90deg, #4dabf7, #339af0);
+            border-radius: 10px;
+            transition: width 0.8s ease;
+        }
+        
+        .music-controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.5);
+            padding: 15px;
+            border-radius: 15px;
+            text-align: center;
+        }
+        
+        .placed-atom {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 2px solid white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            cursor: move;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            z-index: 10;
+        }
+        
+        .success-effect {
+            animation: successPulse 0.6s ease forwards;
+        }
+        
+        @keyframes successPulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); background: rgba(46, 204, 113, 0.3); }
+            100% { transform: scale(1); }
+        }
+        
+        .glow { animation: glow 1s ease-in-out infinite alternate; }
+        
+        @keyframes glow {
+            from { box-shadow: 0 0 5px rgba(255,255,255,0.3); }
+            to { box-shadow: 0 0 15px rgba(255,255,255,0.6); }
+        }
+        
+        h2, h3 { margin-bottom: 15px; }
+        .sidebar h2 { color: #ffd43b; text-align: center; }
+        
+        @media (max-width: 768px) {
+            .container { flex-direction: column; }
+            .sidebar { width: 100%; height: auto; }
+            .game-area { flex-direction: column; }
+            .puzzle-area, .ar-viewer { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <h2>🧪 AR Chemistry Game</h2>
+            
+            <div class="level-indicator">
+                <h3 id="level-title">⭐ Level 1</h3>
+                <div class="level-bar">
+                    <div class="level-progress" id="level-progress" style="width: 6.7%;"></div>
+                </div>
+                <div id="level-description">Molekul Dasar</div>
+            </div>
+            
+            <div class="tutorial">
+                <h3>📚 Tutorial</h3>
+                <p><strong>🔗 Alkana:</strong> CₙH₂ₙ₊₂</p>
+                <p><strong>⚡ Alkena:</strong> CₙH₂ₙ</p>
+                <p><strong>💫 Alkuna:</strong> CₙH₂ₙ₋₂</p>
+            </div>
+            
+            <div class="challenge-card">
+                <h3>🎯 Tantangan</h3>
+                <div id="current-challenge">Buat: <strong>Metana (CH₄)</strong></div>
+                <div>Tipe: <span id="molecule-type">Alkana</span></div>
+                <div>Progress: <span id="progress">1/15</span></div>
+            </div>
+            
+            <div class="atom-palette">
+                <h3>⚛️ Atom Palette</h3>
+                <div class="atom carbon" draggable="true" data-atom="C">C</div>
+                <div class="atom hydrogen" draggable="true" data-atom="H">H</div>
+            </div>
+            
+            <button class="btn" onclick="clearWorkspace()">🗑️ Clear</button>
+            <button class="btn success" onclick="checkMolecule()">✅ Check</button>
+            <button class="btn" onclick="showHint()">💡 Hint</button>
+            <button class="btn" onclick="nextChallenge()">⏭️ Next</button>
+        </div>
+        
+        <div class="main-area">
+            <div class="top-bar">
+                <div class="score">💎 Skor: <span id="score">0</span></div>
+                <div class="timer">⏰ <span id="timer">5:00</span></div>
+                <div class="score">🏆 Streak: <span id="streak">0</span></div>
+            </div>
+            
+            <div class="game-area">
+                <div class="puzzle-area">
+                    <h3>🧩 Area Penyusunan Molekul</h3>
+                    <div class="workspace" id="workspace"></div>
+                    <div id="molecule-info" style="margin-top: 15px; padding: 10px; background: rgba(255,255,255,0.1); border-radius: 10px;"></div>
+                </div>
+                
+                <div class="ar-viewer">
+                    <h3 style="text-align: center; padding: 15px; color: white;">📱 3D Visualization</h3>
+                    <div class="music-controls">
+                        <button class="btn" onclick="toggleMusic()" style="padding: 5px 10px;">🎵</button>
+                        <span id="music-status">ON</span>
+                    </div>
+                    <canvas id="ar-canvas"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="feedback" id="feedback">
+        <h3 id="feedback-title"></h3>
+        <p id="feedback-message"></p>
+        <button class="btn" onclick="closeFeedback()">OK</button>
+    </div>
+
+    <script>
+        // Game State
+        let gameState = {
+            score: 0, streak: 0, timeLeft: 180, currentChallenge: 0, timer: null,
+            totalChallenges: 15, currentLevel: 1, placedAtoms: []
+        };
+
+        // Challenges
+        const challenges = [
+            {name: "Metana", formula: "CH₄", type: "Alkana", carbons: 1, hydrogens: 4, points: 50},
+            {name: "Etana", formula: "C₂H₆", type: "Alkana", carbons: 2, hydrogens: 6, points: 75},
+            {name: "Propana", formula: "C₃H₈", type: "Alkana", carbons: 3, hydrogens: 8, points: 100},
+            {name: "Etena", formula: "C₂H₄", type: "Alkena", carbons: 2, hydrogens: 4, points: 125},
+            {name: "Propena", formula: "C₃H₆", type: "Alkena", carbons: 3, hydrogens: 6, points: 150},
+            {name: "Butena", formula: "C₄H₈", type: "Alkena", carbons: 4, hydrogens: 8, points: 175},
+            {name: "Etuna", formula: "C₂H₂", type: "Alkuna", carbons: 2, hydrogens: 2, points: 200},
+            {name: "Propuna", formula: "C₃H₄", type: "Alkuna", carbons: 3, hydrogens: 4, points: 225},
+            {name: "Butuna", formula: "C₄H₆", type: "Alkuna", carbons: 4, hydrogens: 6, points: 250},
+            {name: "Pentana", formula: "C₅H₁₂", type: "Alkana", carbons: 5, hydrogens: 12, points: 300},
+            {name: "Pentena", formula: "C₅H₁₀", type: "Alkena", carbons: 5, hydrogens: 10, points: 350},
+            {name: "Heksana", formula: "C₆H₁₄", type: "Alkana", carbons: 6, hydrogens: 14, points: 400},
+            {name: "Heptana", formula: "C₇H₁₆", type: "Alkana", carbons: 7, hydrogens: 16, points: 450},
+            {name: "Oktana", formula: "C₈H₁₈", type: "Alkana", carbons: 8, hydrogens: 18, points: 500},
+            {name: "Dekana", formula: "C₁₀H₂₂", type: "Alkana", carbons: 10, hydrogens: 22, points: 1000}
+        ];
+
+        // Audio System
+        let audioContext, musicPlaying = true;
+
+        // Three.js Variables
+        let scene, camera, renderer, moleculeGroup;
+
+        // Initialize Game
+        document.addEventListener('DOMContentLoaded', function() {
+            initAudio();
+            initAR();
+            initGame();
+            setupDragAndDrop();
+            startTimer();
+        });
+
+        function initAudio() {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            } catch(e) {
+                console.log('Audio not supported');
+            }
+        }
+
+        function playSound(freq, duration = 0.3) {
+            if (!audioContext || !musicPlaying) return;
+            
+            const osc = audioContext.createOscillator();
+            const gain = audioContext.createGain();
+            
+            osc.connect(gain);
+            gain.connect(audioContext.destination);
+            
+            osc.frequency.setValueAtTime(freq, audioContext.currentTime);
+            gain.gain.setValueAtTime(0.1, audioContext.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+            
+            osc.start();
+            osc.stop(audioContext.currentTime + duration);
+        }
+
+        function toggleMusic() {
+            musicPlaying = !musicPlaying;
+            document.getElementById('music-status').textContent = musicPlaying ? 'ON' : 'OFF';
+        }
+
+        function initGame() {
+            updateChallenge();
+            updateUI();
+        }
+
+        function updateChallenge() {
+            const challenge = challenges[gameState.currentChallenge];
+            document.getElementById('current-challenge').innerHTML = `Buat: <strong>${challenge.name} (${challenge.formula})</strong>`;
+            document.getElementById('molecule-type').textContent = challenge.type;
+            document.getElementById('progress').textContent = `${gameState.currentChallenge + 1}/${gameState.totalChallenges}`;
+            updateLevel();
+        }
+
+        function updateLevel() {
+            const newLevel = Math.ceil((gameState.currentChallenge + 1) / 3);
+            if (newLevel !== gameState.currentLevel) {
+                gameState.currentLevel = newLevel;
+                playSound(523, 0.5);
+            }
+            
+            document.getElementById('level-title').textContent = `⭐ Level ${gameState.currentLevel}`;
+            document.getElementById('level-description').textContent = `Molekul Level ${gameState.currentLevel}`;
+            
+            const progress = ((gameState.currentChallenge + 1) / gameState.totalChallenges) * 100;
+            document.getElementById('level-progress').style.width = progress + '%';
+        }
+
+        function updateUI() {
+            document.getElementById('score').textContent = gameState.score;
+            document.getElementById('streak').textContent = gameState.streak;
+            
+            const minutes = Math.floor(gameState.timeLeft / 60);
+            const seconds = gameState.timeLeft % 60;
+            document.getElementById('timer').textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            
+            updateMoleculeInfo();
+        }
+
+        function updateMoleculeInfo() {
+            const carbons = gameState.placedAtoms.filter(atom => atom.type === 'C').length;
+            const hydrogens = gameState.placedAtoms.filter(atom => atom.type === 'H').length;
+            
+            document.getElementById('molecule-info').innerHTML = `
+                <strong>Molekul Saat Ini:</strong><br>
+                🔴 Carbon: ${carbons}<br>
+                ⚪ Hidrogen: ${hydrogens}<br>
+                📝 Formula: C${carbons}H${hydrogens}
+            `;
+        }
+
+        function startTimer() {
+            gameState.timer = setInterval(() => {
+                gameState.timeLeft--;
+                updateUI();
+                
+                if (gameState.timeLeft <= 0) {
+                    endGame();
+                }
+            }, 1000);
+        }
+
+        function initAR() {
+            const canvas = document.getElementById('ar-canvas');
+            const parent = canvas.parentElement;
+            
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, parent.clientWidth / parent.clientHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({canvas, antialias: true, alpha: true});
+            renderer.setSize(parent.clientWidth, parent.clientHeight);
+            
+            scene.background = new THREE.Color(0x001122);
+            
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(1, 1, 1);
+            scene.add(directionalLight);
+            
+            moleculeGroup = new THREE.Group();
+            scene.add(moleculeGroup);
+            camera.position.z = 5;
+            animate3D();
+        }
+
+        function animate3D() {
+            requestAnimationFrame(animate3D);
+            if (moleculeGroup) {
+                moleculeGroup.rotation.y += 0.01;
+            }
+            renderer.render(scene, camera);
+        }
+
+        function update3DMolecule() {
+            moleculeGroup.clear();
+            
+            gameState.placedAtoms.forEach(atom => {
+                const geometry = new THREE.SphereGeometry(0.3, 16, 16);
+                const material = new THREE.MeshLambertMaterial({
+                    color: atom.type === 'C' ? 0x333333 : 0xffffff
+                });
+                const sphere = new THREE.Mesh(geometry, material);
+                
+                sphere.position.set(
+                    (atom.x - 150) / 100,
+                    -(atom.y - 150) / 100,
+                    0
+                );
+                
+                moleculeGroup.add(sphere);
+            });
+        }
+
+        function setupDragAndDrop() {
+            const atoms = document.querySelectorAll('.atom');
+            const workspace = document.getElementById('workspace');
+            
+            atoms.forEach(atom => {
+                atom.addEventListener('dragstart', handleDragStart);
+            });
+            
+            workspace.addEventListener('dragover', handleDragOver);
+            workspace.addEventListener('drop', handleDrop);
+            workspace.addEventListener('dragenter', () => workspace.classList.add('drag-over'));
+            workspace.addEventListener('dragleave', () => workspace.classList.remove('drag-over'));
+        }
+
+        function handleDragStart(e) {
+            e.dataTransfer.setData('text/plain', e.target.dataset.atom);
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            const workspace = document.getElementById('workspace');
+            workspace.classList.remove('drag-over');
+            
+            const atomType = e.dataTransfer.getData('text/plain');
+            const rect = workspace.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            createAtomInWorkspace(atomType, x, y);
+        }
+
+        function createAtomInWorkspace(type, x, y) {
+            const atom = document.createElement('div');
+            atom.className = `placed-atom ${type === 'C' ? 'carbon' : 'hydrogen'}`;
+            atom.textContent = type;
+            atom.style.left = (x - 20) + 'px';
+            atom.style.top = (y - 20) + 'px';
+            
+            atom.addEventListener('click', () => {
+                atom.remove();
+                gameState.placedAtoms = gameState.placedAtoms.filter(a => a.element !== atom);
+                updateUI();
+                update3DMolecule();
+            });
+            
+            document.getElementById('workspace').appendChild(atom);
+            
+            gameState.placedAtoms.push({
+                type: type,
+                element: atom,
+                x: x,
+                y: y
+            });
+            
+            updateUI();
+            update3DMolecule();
+        }
+
+        function clearWorkspace() {
+            document.getElementById('workspace').innerHTML = '';
+            gameState.placedAtoms = [];
+            updateUI();
+            update3DMolecule();
+        }
+
+        function checkMolecule() {
+            const challenge = challenges[gameState.currentChallenge];
+            const carbons = gameState.placedAtoms.filter(atom => atom.type === 'C').length;
+            const hydrogens = gameState.placedAtoms.filter(atom => atom.type === 'H').length;
+            
+            if (carbons === challenge.carbons && hydrogens === challenge.hydrogens) {
+                // Success!
+                const points = challenge.points + (gameState.streak * 25);
+                gameState.score += points;
+                gameState.streak++;
+                
+                playSound(523, 0.3);
+                setTimeout(() => playSound(659, 0.3), 150);
+                setTimeout(() => playSound(784, 0.3), 300);
+                
+                document.querySelector('.workspace').classList.add('success-effect');
+                setTimeout(() => {
+                    document.querySelector('.workspace').classList.remove('success-effect');
+                }, 600);
+                
+                showFeedback('🎉 Benar!', `${challenge.name} berhasil dibuat! +${points} poin`, 'success');
+                
+                setTimeout(() => {
+                    nextChallenge();
+                }, 2000);
+                
+            } else {
+                // Wrong answer
+                gameState.streak = 0;
+                playSound(200, 0.5);
+                
+                let message = `Formula yang benar: ${challenge.formula}\n`;
+                message += `Anda membuat: C${carbons}H${hydrogens}`;
+                
+                showFeedback('❌ Salah', message, 'error');
+            }
+            
+            updateUI();
+        }
+
+        function nextChallenge() {
+            if (gameState.currentChallenge < gameState.totalChallenges - 1) {
+                gameState.currentChallenge++;
+                clearWorkspace();
+                updateChallenge();
+            } else {
+                endGame();
+            }
+        }
+
+        function showHint() {
+            const challenge = challenges[gameState.currentChallenge];
+            let hint = `💡 Hint: ${challenge.name} membutuhkan:\n`;
+            hint += `🔴 ${challenge.carbons} atom Carbon\n`;
+            hint += `⚪ ${challenge.hydrogens} atom Hidrogen\n`;
+            hint += `📋 Tipe: ${challenge.type}`;
+            
+            showFeedback('💡 Hint', hint, 'info');
+        }
+
+        function showFeedback(title, message, type) {
+            document.getElementById('feedback-title').textContent = title;
+            document.getElementById('feedback-message').textContent = message;
+            document.getElementById('feedback').classList.add('show');
+        }
+
+        function closeFeedback() {
+            document.getElementById('feedback').classList.remove('show');
+        }
+
+        function endGame() {
+            clearInterval(gameState.timer);
+            
+            let message = `🏁 Game Selesai!\n\n`;
+            message += `💎 Skor Akhir: ${gameState.score}\n`;
+            message += `🏆 Streak Terbaik: ${gameState.streak}\n`;
+            message += `📈 Level Tercapai: ${gameState.currentLevel}\n`;
+            message += `🎯 Tantangan Selesai: ${gameState.currentChallenge + 1}/${gameState.totalChallenges}`;
+            
+            showFeedback('🎮 Game Over', message, 'info');
+        }
+
+        // Window resize handler
+        window.addEventListener('resize', () => {
+            if (renderer && camera) {
+                const canvas = document.getElementById('ar-canvas');
+                const parent = canvas.parentElement;
+                camera.aspect = parent.clientWidth / parent.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(parent.clientWidth, parent.clientHeight);
+            }
+        });
+    </script>
+</body>
+</html>
